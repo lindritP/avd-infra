@@ -72,8 +72,10 @@ jobs:
 
       # ── GATE 3: tflint (Azure-spezifische Fehler & Anti-Patterns) ───────────
       - name: tflint installieren
-        uses: terraform-linters/setup-tflint@v4
+        uses: terraform-linters/setup-tflint@v6
       - name: tflint ausführen
+        env:
+          GITHUB_TOKEN: ${{github.token}}  # für tflint-Plugins, die Infos aus GitHub holen
         run: |
           tflint --init --config="${GITHUB_WORKSPACE}/config/.tflint.hcl"
           tflint --config="${GITHUB_WORKSPACE}/config/.tflint.hcl"
