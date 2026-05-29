@@ -1,0 +1,114 @@
+name: Terraform CD
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WANN: Nach dem Merge in main (für dev) ODER manuell per Knopf (für prod).
+# Hier wird die echte Infrastruktur verändert -> mit Sicherheitsnetz.
+# ─────────────────────────────────────────────────────────────────────────────
+on:
+  push:
+    branches: [main]
+    paths:
+      - "terraform/**"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Ziel-Environment"
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+permissions:
+  contents: read
+  id-token: write
+
+# WICHTIG: cancel-in-progress FALSE. Ein laufendes apply NIE abbrechen,
+# sonst riskiert man einen kaputten/gesperrten State.
+concurrency:
+  group: tf-cd-${{ github.event.inputs.environment || 'dev' }}
+  cancel-in-progress: false
+
+env:
+  TF_VERSION: "1.15.5"
+  ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  ARM_USE_OIDC: "true"
+
+jobs:
+  # ── JOB 1: PLAN ──────────────────────────────────────────────────────────────
+  # Erzeugt einen frischen Plan auf main und legt ihn als Artefakt ab.
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    outputs:
+      env_name: ${{ steps.setenv.outputs.env_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Environment bestimmen
+        id: setenv
+        run: echo "env_name=${{ github.event.inputs.environment || 'dev' }}" >> "$GITHUB_OUTPUT"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: terraform init
+        run: terraform init -input=false
+        working-directory: terraform/environments/${{ steps.setenv.outputs.env_name }}
+
+      - name: terraform plan
+        run: terraform plan -input=false -out=tfplan
+        working-directory: terraform/environments/${{ steps.setenv.outputs.env_name }}
+
+      # Den exakt geprüften Plan als Artefakt sichern -> Apply nutzt GENAU diesen.
+      - name: Plan als Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ steps.setenv.outputs.env_name }}
+          path: terraform/environments/${{ steps.setenv.outputs.env_name }}/tfplan
+          retention-days: 5
+
+  # ── JOB 2: APPLY ─────────────────────────────────────────────────────────────
+  # Wartet auf JOB 1. Das GitHub *Environment* erzwingt die Genehmigung:
+  # bei "prod" mit Required Reviewers pausiert die Pipeline hier auf einen Menschen.
+  apply:
+    name: Apply
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: ${{ needs.plan.outputs.env_name }}   # <-- Approval-Gate
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Gespeicherten Plan laden
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ needs.plan.outputs.env_name }}
+          path: terraform/environments/${{ needs.plan.outputs.env_name }}
+
+      - name: terraform init
+        run: terraform init -input=false
+        working-directory: terraform/environments/${{ needs.plan.outputs.env_name }}
+
+      # Wir wenden den GEPRÜFTEN Plan an -> keine Differenz zwischen Review und Realität.
+      - name: terraform apply
+        run: terraform apply -input=false tfplan
+        working-directory: terraform/environments/${{ needs.plan.outputs.env_name }}

@@ -1,0 +1,127 @@
+name: Terraform CI
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WANN: Bei jedem Pull Request, der Terraform-Code anfasst.
+# Der PR ist der sichere Ort: hier wird NUR geprüft und geplant, NIE angewendet.
+# ─────────────────────────────────────────────────────────────────────────────
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform-ci.yml"
+
+# Least Privilege: dieser Lauf darf nur das absolut Nötige.
+permissions:
+  contents: read         # Code auschecken
+  id-token: write        # OIDC-Token für den Azure-Login anfordern
+  pull-requests: write   # Plan-Ergebnis als PR-Kommentar posten
+
+# Pro PR-Branch nur ein CI-Lauf; ältere abbrechen (Plan ist ungefährlich).
+concurrency:
+  group: tf-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TF_VERSION: "1.15.5"                       # <-- an dein Projekt anpassen
+  WORKING_DIR: "terraform/environments/dev" # <-- Pfad zu deiner env-Komposition
+  # Nur IDs (keine Geheimnisse) -> als GitHub *Variables* hinterlegt:
+  ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  # Sagt Provider UND State-Backend: nutze OIDC, kein gespeichertes Passwort.
+  ARM_USE_OIDC: "true"
+
+jobs:
+  validate-and-plan:
+    name: Validate & Plan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      - name: Terraform installieren
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          # Der "Wrapper" fängt stdout der terraform-Befehle ein,
+          # damit wir den Plan unten als PR-Kommentar posten können.
+
+      # OIDC-Login: GitHub tauscht ein kurzlebiges Token gegen Azure-Zugriff.
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # ── GATE 1: Formatierung ────────────────────────────────────────────────
+      - name: terraform fmt
+        run: terraform fmt -check -recursive
+        working-directory: ${{ env.WORKING_DIR }}
+
+      # Init verbindet sich mit dem Remote-State (Azure Storage Backend).
+      - name: terraform init
+        run: terraform init -input=false
+        working-directory: ${{ env.WORKING_DIR }}
+
+      # ── GATE 2: Syntax & innere Konsistenz ──────────────────────────────────
+      - name: terraform validate
+        run: terraform validate -no-color
+        working-directory: ${{ env.WORKING_DIR }}
+
+      # ── GATE 3: tflint (Azure-spezifische Fehler & Anti-Patterns) ───────────
+      - name: tflint installieren
+        uses: terraform-linters/setup-tflint@v4
+      - name: tflint ausführen
+        run: |
+          tflint --init --config="${GITHUB_WORKSPACE}/config/.tflint.hcl"
+          tflint --config="${GITHUB_WORKSPACE}/config/.tflint.hcl"
+        working-directory: ${{ env.WORKING_DIR }}
+
+      # ── GATE 4: Security-Scan (checkov) ─────────────────────────────────────
+      # Start: --soft-fail (nur warnen). Wenn das Repo sauber ist, entfernen,
+      # dann wird der Scan zum harten Tor.
+      - name: Checkov Security Scan
+        run: |
+          pip install --quiet checkov
+          checkov -d "${{ env.WORKING_DIR }}" --quiet --soft-fail
+
+      # ── PLAN: reine Vorschau, ändert NICHTS ─────────────────────────────────
+      - name: terraform plan
+        id: plan
+        run: terraform plan -input=false -no-color -out=tfplan
+        working-directory: ${{ env.WORKING_DIR }}
+        continue-on-error: true   # damit wir den Fehler unten im Kommentar zeigen
+
+      # Plan-Ergebnis menschenlesbar an den PR kommentieren.
+      - name: Plan als PR-Kommentar
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Plan kann riesig sein -> auf ~60k Zeichen kürzen (Kommentarlimit).
+            let plan = `${{ steps.plan.outputs.stdout }}`;
+            if (plan.length > 60000) {
+              plan = plan.substring(0, 60000) + "\n\n... (gekürzt, vollständigen Plan in den Logs ansehen)";
+            }
+            const body = `### Terraform Plan — \`${{ steps.plan.outcome }}\`
+            <details><summary>Plan anzeigen</summary>
+
+            \`\`\`hcl
+            ${plan}
+            \`\`\`
+            </details>
+
+            *Workflow:* \`${{ github.workflow }}\` · *Commit:* \`${{ github.sha }}\``;
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });
+
+      # Wenn der Plan fehlschlug, soll der ganze Job rot werden.
+      - name: Plan-Status durchreichen
+        if: steps.plan.outcome == 'failure'
+        run: exit 1

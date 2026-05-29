@@ -1,0 +1,44 @@
+name: Ansible CI
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WANN: Bei jedem PR, der Ansible-Code anfasst. Lint + Syntax, ohne etwas auszuführen.
+# ─────────────────────────────────────────────────────────────────────────────
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "ansible/**"
+      - ".github/workflows/ansible-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ansible-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint & Syntax
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ansible
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Ansible-Tools installieren
+        run: pip install --quiet ansible-core ansible-lint
+
+      # GATE 1: ansible-lint findet riskante/unsaubere Muster in Playbooks & Rollen.
+      - name: ansible-lint
+        run: ansible-lint
+
+      # GATE 2: Syntax-Check (lädt das Playbook, ohne es auszuführen).
+      - name: Syntax-Check
+        run: ansible-playbook playbooks/site.yml --syntax-check -i inventories/dev/hosts.ini

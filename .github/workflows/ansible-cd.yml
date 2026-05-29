@@ -1,0 +1,70 @@
+name: Ansible CD
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WANN: Manuell per Knopf (empfohlen) oder nach Merge in main.
+# Führt die Playbooks gegen die echten Hosts aus -> mit Environment-Gate.
+#
+# HINWEIS für private VNets (z. B. dein AVD-DC): GitHub-gehostete Runner kommen
+# NICHT an private Hosts. Dann brauchst du hier einen self-hosted Runner im VNet
+# (runs-on: [self-hosted, vnet]). Siehe README Abschnitt 11.
+# ─────────────────────────────────────────────────────────────────────────────
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Ziel-Environment"
+        type: choice
+        options: [dev, prod]
+        default: dev
+  push:
+    branches: [main]
+    paths:
+      - "ansible/**"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ansible-cd-${{ github.event.inputs.environment || 'dev' }}
+  cancel-in-progress: false
+
+jobs:
+  configure:
+    name: Configure Hosts
+    runs-on: ubuntu-latest          # bei privaten Hosts: [self-hosted, vnet]
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    defaults:
+      run:
+        working-directory: ansible
+    env:
+      ENV_NAME: ${{ github.event.inputs.environment || 'dev' }}
+      ANSIBLE_HOST_KEY_CHECKING: "False"
+      # Verbindungs-Credentials kommen aus Environment-SECRETS (nicht Variables!):
+      ANSIBLE_USER: ${{ secrets.ANSIBLE_USER }}
+      ANSIBLE_PASSWORD: ${{ secrets.ANSIBLE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Ansible installieren
+        run: pip install --quiet ansible-core pywinrm
+
+      # Schritt 1 — DRY RUN: zeigt, was sich ändern WÜRDE (wie terraform plan).
+      - name: Playbook (Check-Modus / Dry Run)
+        run: |
+          ansible-playbook playbooks/site.yml \
+            -i "inventories/${ENV_NAME}/hosts.ini" \
+            --check --diff \
+            --extra-vars "ansible_user=${ANSIBLE_USER} ansible_password=${ANSIBLE_PASSWORD}"
+
+      # Schritt 2 — ECHTER LAUF: erst nach dem (ggf. genehmigten) Environment-Gate.
+      - name: Playbook ausführen
+        run: |
+          ansible-playbook playbooks/site.yml \
+            -i "inventories/${ENV_NAME}/hosts.ini" \
+            --extra-vars "ansible_user=${ANSIBLE_USER} ansible_password=${ANSIBLE_PASSWORD}"
