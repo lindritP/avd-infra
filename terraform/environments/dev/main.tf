@@ -66,8 +66,7 @@ resource "azurerm_backup_protected_file_share" "share1" {
   recovery_vault_name = azurerm_recovery_services_vault.vault.name
   source_file_share_name  = azurerm_storage_share.fileshare.name
   backup_policy_id    = azurerm_backup_policy_file_share.policy.id
-  source_storage_account_id = azurerm_storage_account.storage.id
-
+  source_storage_account_id = azurerm_backup_container_storage_account.container.storage_account_id
 }
 
 # Create Backup Policy for File Share
