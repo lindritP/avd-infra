@@ -41,7 +41,7 @@ resource "azurerm_storage_share" "fileshare" {
 
 
 resource "azurerm_resource_group" "rg-backup" {
-  name     = "rg-backup"
+  name     = "rg-backup001"
   location = var.location
   tags     = local.tags
 }
