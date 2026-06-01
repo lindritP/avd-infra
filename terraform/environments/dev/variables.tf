@@ -16,3 +16,8 @@ variable "region_abbr" {
   type    = string
   default = "weu"
 }
+
+variable "vaultName" {
+  type    = string
+  default = "example-vault"
+}

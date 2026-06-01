@@ -16,7 +16,7 @@ permissions:
   issues: write             # um bei Drift ein Issue zu öffnen
 
 env:
-  TF_VERSION: "1.9.5"
+  TF_VERSION: "1.15.5"
   ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
   ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
   ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}

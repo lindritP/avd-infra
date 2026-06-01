@@ -5,12 +5,76 @@ locals {
     environment = var.environment
     managedBy   = "terraform"
   }
+
+  skuName = "RS0"
+
+  skuTier = "Standard"
 }
 
 resource "azurerm_resource_group" "workload" {
   name     = "rg-${local.name_suffix}-001"
   location = var.location
   tags     = local.tags
+}
+
+resource "azurerm_resource_group" "rg" {
+  name     = "rg-storage"
+  location = var.location
+  tags     = local.tags
+}
+
+resource "azurerm_storage_account" "storage" {
+  name                     = "stavdbackup${var.region_abbr}${var.environment}"
+  resource_group_name      = azurerm_resource_group.rg.name
+  location                 = azurerm_resource_group.rg.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+  tags                     = local.tags
+}
+
+resource "azurerm_file_share" "fileshare" {
+  name                 = "generealfileshare"
+  storage_account_name = azurerm_storage_account.storage.name
+  quota                = 1
+  depends_on           = [azurerm_storage_account.storage]
+}
+
+
+resource "azurerm_resource_group" "rg" {
+  name     = "rg-backup"
+  location = var.location
+  tags     = local.tags
+}
+
+# Create Recovery Services Vault
+resource "azurerm_recovery_services_vault" "vault" {
+  name                = var.vaultName
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  sku                 = local.skuName
+}
+resource "azurerm_backup_protected_file_share" "share1" {
+  resource_group_name = azurerm_resource_group.storage.name
+  recovery_vault_name = azurerm_recovery_services_vault.vault.name
+  source_file_share_name  = azurerm_file_share.fileshare.name
+  backup_policy_id    = azurerm_backup_policy_file_share.policy.id
+  source_storage_account_id = azurerm_storage_account.storage.id
+}
+
+# Create Backup Policy for File Share
+resource "azurerm_backup_policy_file_share" "policy" {
+  name                = "vaultstorageconfig"
+  resource_group_name = azurerm_resource_group.rg.name
+  recovery_vault_name = azurerm_recovery_services_vault.vault.name
+
+  backup {
+    frequency = "Daily"
+    time      = "23:00"
+  }
+
+  retention_daily {
+    count = 10
+  }
 }
 
 output "resource_group_name" {
