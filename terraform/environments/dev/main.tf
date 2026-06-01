@@ -34,7 +34,7 @@ resource "azurerm_storage_account" "storage" {
 
 resource "azurerm_storage_share" "fileshare" {
   name                 = "generealfileshare"
-  storage_account_name = azurerm_storage_account.rg.name
+  storage_account_name = azurerm_storage_account.storage.name
   quota                = 1
   depends_on           = [azurerm_storage_account.storage]
 }
@@ -54,9 +54,9 @@ resource "azurerm_recovery_services_vault" "vault" {
   sku                 = local.skuName
 }
 resource "azurerm_backup_protected_file_share" "share1" {
-  resource_group_name = azurerm_resource_group.storage.name
+  resource_group_name = azurerm_resource_group.rg-backup.name
   recovery_vault_name = azurerm_recovery_services_vault.vault.name
-  source_file_share_name  = azurerm_file_share.fileshare.name
+  source_file_share_name  = azurerm_storage_share.fileshare.name
   backup_policy_id    = azurerm_backup_policy_file_share.policy.id
   source_storage_account_id = azurerm_storage_account.storage.id
 }
