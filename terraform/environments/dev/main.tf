@@ -32,7 +32,7 @@ resource "azurerm_storage_account" "storage" {
   tags                     = local.tags
 }
 
-resource "azurerm_file_share" "fileshare" {
+resource "azurerm_storage_share" "fileshare" {
   name                 = "generealfileshare"
   storage_account_name = azurerm_storage_account.storage.name
   quota                = 1
