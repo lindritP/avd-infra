@@ -40,7 +40,7 @@ resource "azurerm_file_share" "fileshare" {
 }
 
 
-resource "azurerm_resource_group" "rg" {
+resource "azurerm_resource_group" "rg-backup" {
   name     = "rg-backup"
   location = var.location
   tags     = local.tags
@@ -49,8 +49,8 @@ resource "azurerm_resource_group" "rg" {
 # Create Recovery Services Vault
 resource "azurerm_recovery_services_vault" "vault" {
   name                = var.vaultName
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg-backup.location
+  resource_group_name = azurerm_resource_group.rg-backup.name
   sku                 = local.skuName
 }
 resource "azurerm_backup_protected_file_share" "share1" {
@@ -64,7 +64,7 @@ resource "azurerm_backup_protected_file_share" "share1" {
 # Create Backup Policy for File Share
 resource "azurerm_backup_policy_file_share" "policy" {
   name                = "vaultstorageconfig"
-  resource_group_name = azurerm_resource_group.rg.name
+  resource_group_name = azurerm_resource_group.rg-backup.name
   recovery_vault_name = azurerm_recovery_services_vault.vault.name
 
   backup {
