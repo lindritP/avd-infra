@@ -1,8 +1,3 @@
-variable "workload" {
-  type    = string
-  default = "avd"
-}
-
 variable "environment" {
   type = string
 }
