@@ -16,3 +16,4 @@ variable "region_abbr" {
     type = string
     default = "weu"
 }
+
