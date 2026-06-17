@@ -69,18 +69,9 @@ resource "azurerm_network_security_group" "nsg" {
     destination_address_prefix = "*"
   }
 
-  security_rule {
-    name                       = "Allow-SSH-Inbound"
-    description                = "Allow SSH access from specified source address prefixes for domain controller management with Ansible"
-    priority                   = 1002
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "22"
-    source_address_prefix      = var.allowed_source_address_prefixes
-    destination_address_prefix = "*"
-  }
+  # Hinweis: Die fruehere "Allow-SSH-Inbound"-Regel (Port 22 aus dem Internet)
+  # wurde entfernt. Der Ansible-Controller hat keine Public IP mehr und liegt im
+  # eigenen Subnet; der DC ist Windows und wird per WinRM/RDP verwaltet.
 }
 
 resource "azurerm_subnet_network_security_group_association" "subnet_nsg_assoc" {
@@ -109,5 +100,12 @@ resource "azurerm_windows_virtual_machine" "domain_controller" {
     offer     = "WindowsServer"
     sku       = "2025-Datacenter"
     version   = "latest"
+  }
+
+  # Tags -> vom azure_rm Dynamic Inventory zur Gruppierung genutzt.
+  tags = {
+    role        = "dc"
+    environment = var.environment
+    os          = "windows"
   }
 }
