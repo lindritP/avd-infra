@@ -1,0 +1,7 @@
+---
+# Collections für die Windows-/AVD-Konfiguration + azure_rm Dynamic Inventory.
+# Installation auf der Control Node: ansible-galaxy collection install -r requirements.yml
+collections:
+  - name: azure.azcollection
+  - name: ansible.windows
+  - name: community.windows

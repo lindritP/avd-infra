@@ -1,0 +1,14 @@
+---
+# Verbindungs-Variablen für alle Windows-Hosts (Gruppe os_windows aus azure_rm
+# keyed_groups auf tag os=windows).
+#
+# WinRM über HTTPS (5986). Credentials kommen als ENV-Variablen aus der
+# CD-Pipeline (Quelle: Key Vault -> Environment-Secret) und werden hier per
+# env-lookup gelesen -> kein Klartext-Passwort auf der Kommandozeile.
+ansible_connection: winrm
+ansible_port: 5986
+ansible_winrm_transport: ntlm
+ansible_winrm_server_cert_validation: ignore
+
+ansible_user: "{{ lookup('env', 'ANSIBLE_USER') }}"
+ansible_password: "{{ lookup('env', 'ANSIBLE_PASSWORD') }}"
