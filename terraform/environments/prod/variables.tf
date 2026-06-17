@@ -3,17 +3,17 @@ variable "workload" {
   default = "avd"
 }
 
-variable "environment" { 
-    type = string
+variable "environment" {
+  type = string
 }
 
-variable "location"    { 
-    type = string
-    default = "westeurope" 
+variable "location" {
+  type    = string
+  default = "westeurope"
 }
 
-variable "region_abbr" { 
-    type = string
-    default = "weu"
+variable "region_abbr" {
+  type    = string
+  default = "weu"
 }
 
