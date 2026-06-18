@@ -18,7 +18,7 @@ variable "customer" {
 }
 
 variable "allowed_source_address_prefixes" {
-  type        = string
+  type        = list(string)
   description = "List of allowed source address prefixes for RDP access to the domain controller. Use CIDR notation (e.g., <IP_ADDRESS>/32)."
 
 }

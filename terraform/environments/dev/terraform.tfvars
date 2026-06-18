@@ -3,7 +3,7 @@ environment = "dev"
 
 customer = "lindrit"
 
-allowed_source_address_prefixes = "91.112.213.242/32"
+allowed_source_address_prefixes = ["91.112.213.242/32", "46.125.106.192/32"]
 
 dc_sku            = "Standard_B2ls_v2"
 dc_admin_username = "lindadmin"
