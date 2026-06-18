@@ -34,14 +34,6 @@ resource "azurerm_key_vault_secret" "ansible_ssh_private_key" {
   depends_on = [time_sleep.kv_rbac_propagation]
 }
 
-# ── Eigenes Subnet + NSG fuer den Runner (Segmentierung) ────────────────────
-resource "azurerm_subnet" "ansible" {
-  name                 = "snet-${local.ansible_name_suffix}"
-  resource_group_name  = azurerm_resource_group.ansible.name
-  virtual_network_name = azurerm_virtual_network.vnet.name
-  address_prefixes     = ["10.0.2.0/24"]
-}
-
 resource "azurerm_network_security_group" "ansible" {
   name                = "nsg-${local.ansible_name_suffix}"
   resource_group_name = azurerm_resource_group.ansible.name
