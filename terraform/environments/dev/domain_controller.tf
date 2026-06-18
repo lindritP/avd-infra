@@ -9,24 +9,6 @@ resource "azurerm_resource_group" "rg" {
   location = var.location
 }
 
-<<<<<<< HEAD
-=======
-resource "azurerm_virtual_network" "vnet" {
-  name                = "vnet-${local.name_suffix}"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-  address_space       = ["10.0.0.0/16"]
-  dns_servers         = [local.dc_ip_address]
-}
-
-resource "azurerm_subnet" "subnet" {
-  name                 = "subnet-${local.name_suffix}"
-  resource_group_name  = azurerm_resource_group.rg.name
-  virtual_network_name = azurerm_virtual_network.vnet.name
-  address_prefixes     = ["10.0.1.0/24"]
-}
-
-
 resource "azurerm_public_ip" "domain_controller_pip" {
   name                = "pip-${local.name_suffix}"
   resource_group_name = azurerm_resource_group.rg.name
@@ -35,7 +17,6 @@ resource "azurerm_public_ip" "domain_controller_pip" {
   sku                 = "Standard"
 }
 
->>>>>>> 06dc1a73b25e4aa3eb76e8d07f47ef49843c7c72
 resource "azurerm_network_interface" "domain_controller_nic" {
   name                = "nic-${local.name_suffix}"
   resource_group_name = azurerm_resource_group.rg.name
