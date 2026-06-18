@@ -14,6 +14,12 @@ locals {
   ansible_name_suffix = "ansible-${var.environment}-${var.customer}-${var.region_abbr}"
 }
 
+resource "azurerm_resource_group" "ansible" {
+  name     = "rg-${local.ansible_name_suffix}"
+  location = var.location
+}
+
+
 # SSH-Schluesselpaar (Break-Glass; primaerer Zugang ist die Serial Console).
 resource "tls_private_key" "ansible" {
   algorithm = "RSA"
@@ -31,15 +37,15 @@ resource "azurerm_key_vault_secret" "ansible_ssh_private_key" {
 # ── Eigenes Subnet + NSG fuer den Runner (Segmentierung) ────────────────────
 resource "azurerm_subnet" "ansible" {
   name                 = "snet-${local.ansible_name_suffix}"
-  resource_group_name  = azurerm_resource_group.rg.name
+  resource_group_name  = azurerm_resource_group.ansible.name
   virtual_network_name = azurerm_virtual_network.vnet.name
   address_prefixes     = ["10.0.2.0/24"]
 }
 
 resource "azurerm_network_security_group" "ansible" {
   name                = "nsg-${local.ansible_name_suffix}"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.ansible.name
+  location            = azurerm_resource_group.ansible.location
 
   # Inbound: alles verbieten (der Runner braucht keinen eingehenden Port,
   # auch nicht aus dem VNet -> blockt lateral movement ZUM Runner).
@@ -105,8 +111,8 @@ resource "azurerm_subnet_network_security_group_association" "ansible" {
 # ── NIC ohne Public IP, im segmentierten Subnet ─────────────────────────────
 resource "azurerm_network_interface" "ansible" {
   name                = "nic-${local.ansible_name_suffix}"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.ansible.name
+  location            = azurerm_resource_group.ansible.location
 
   ip_configuration {
     name                          = "ipconfig-${local.ansible_name_suffix}"
@@ -118,8 +124,8 @@ resource "azurerm_network_interface" "ansible" {
 
 resource "azurerm_linux_virtual_machine" "ansible" {
   name                = "vm-${local.ansible_name_suffix}"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.ansible.name
+  location            = azurerm_resource_group.ansible.location
   size                = var.ansible_vm_size
   admin_username      = var.ansible_admin_username
   network_interface_ids = [
