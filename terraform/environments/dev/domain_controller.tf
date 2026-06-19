@@ -9,6 +9,14 @@ resource "azurerm_resource_group" "rg" {
   location = var.location
 }
 
+resource "azurerm_public_ip" "domain_controller_pip" {
+  name                = "pip-${local.name_suffix}"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  allocation_method   = "Static"
+  sku                 = "Standard"
+}
+
 resource "azurerm_network_interface" "domain_controller_nic" {
   name                = "nic-${local.name_suffix}"
   resource_group_name = azurerm_resource_group.rg.name
@@ -19,7 +27,13 @@ resource "azurerm_network_interface" "domain_controller_nic" {
     subnet_id                     = azurerm_subnet.subnet.id
     private_ip_address_allocation = "Static"
     private_ip_address            = local.dc_ip_address
+    public_ip_address_id          = azurerm_public_ip.domain_controller_pip.id
   }
+
+  depends_on = [
+    azurerm_subnet.subnet,
+    azurerm_public_ip.domain_controller_pip,
+  ]
 }
 
 resource "azurerm_network_security_group" "nsg" {
@@ -35,22 +49,13 @@ resource "azurerm_network_security_group" "nsg" {
     protocol                   = "Tcp"
     source_port_range          = "*"
     destination_port_range     = "3389"
-    source_address_prefix      = var.allowed_source_address_prefixes
+    source_address_prefixes    = var.allowed_source_address_prefixes
     destination_address_prefix = "*"
   }
 
-  security_rule {
-    name                       = "Allow-SSH-Inbound"
-    description                = "Allow SSH access from specified source address prefixes for domain controller management with Ansible"
-    priority                   = 1002
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "22"
-    source_address_prefix      = var.allowed_source_address_prefixes
-    destination_address_prefix = "*"
-  }
+  # Hinweis: Die fruehere "Allow-SSH-Inbound"-Regel (Port 22 aus dem Internet)
+  # wurde entfernt. Der Ansible-Controller hat keine Public IP mehr und liegt im
+  # eigenen Subnet; der DC ist Windows und wird per WinRM/RDP verwaltet.
 }
 
 resource "azurerm_subnet_network_security_group_association" "subnet_nsg_assoc" {
@@ -79,5 +84,12 @@ resource "azurerm_windows_virtual_machine" "domain_controller" {
     offer     = "WindowsServer"
     sku       = "2025-Datacenter"
     version   = "latest"
+  }
+
+  # Tags -> vom azure_rm Dynamic Inventory zur Gruppierung genutzt.
+  tags = {
+    role        = "dc"
+    environment = var.environment
+    os          = "windows"
   }
 }

@@ -1,12 +1,14 @@
 name: Ansible CD
 
 # ─────────────────────────────────────────────────────────────────────────────
-# WANN: Manuell per Knopf (empfohlen) oder nach Merge in main.
+# WANN: NUR manuell per Knopf (workflow_dispatch).
 # Führt die Playbooks gegen die echten Hosts aus -> mit Environment-Gate.
 #
-# HINWEIS für private VNets (z. B. dein AVD-DC): GitHub-gehostete Runner kommen
-# NICHT an private Hosts. Dann brauchst du hier einen self-hosted Runner im VNet
-# (runs-on: [self-hosted, vnet]). Siehe README Abschnitt 11.
+# SICHERHEIT (öffentliches Repo + self-hosted Runner im VNet):
+#  - KEIN push/PR-Trigger -> der self-hosted Runner startet nie automatisch.
+#    Ein gemergter Change löst KEINEN Lauf auf der VNet-Box aus.
+#  - Lauf nur durch bewussten Dispatch + Environment mit Required Reviewers.
+#  - PR-CI (ansible-ci.yml) läuft auf ubuntu-latest, NIE auf self-hosted.
 # ─────────────────────────────────────────────────────────────────────────────
 on:
   workflow_dispatch:
@@ -16,10 +18,6 @@ on:
         type: choice
         options: [dev, prod]
         default: dev
-  push:
-    branches: [main]
-    paths:
-      - "ansible/**"
 
 permissions:
   contents: read
@@ -32,7 +30,7 @@ concurrency:
 jobs:
   configure:
     name: Configure Hosts
-    runs-on: ubuntu-latest          # bei privaten Hosts: [self-hosted, vnet]
+    runs-on: [self-hosted, vnet]    # laeuft auf der Ansible-Control-Node im VNet
     environment: ${{ github.event.inputs.environment || 'dev' }}
     defaults:
       run:
@@ -40,7 +38,9 @@ jobs:
     env:
       ENV_NAME: ${{ github.event.inputs.environment || 'dev' }}
       ANSIBLE_HOST_KEY_CHECKING: "False"
-      # Verbindungs-Credentials kommen aus Environment-SECRETS (nicht Variables!):
+      # WinRM-Credentials als ENV-Variablen (NICHT auf der Kommandozeile via
+      # --extra-vars -> kein Prozesslisten-Leak). Quelle: Key Vault, gesynct ins
+      # Environment-Secret. group_vars liest sie via lookup('env',...).
       ANSIBLE_USER: ${{ secrets.ANSIBLE_USER }}
       ANSIBLE_PASSWORD: ${{ secrets.ANSIBLE_PASSWORD }}
     steps:
@@ -54,17 +54,19 @@ jobs:
       - name: Ansible installieren
         run: pip install --quiet ansible-core pywinrm
 
+      # Dynamic Inventory (azure_rm) authentifiziert sich über die Managed
+      # Identity der Runner-VM (auth_source: msi). Credentials kommen via
+      # ANSIBLE_USER/ANSIBLE_PASSWORD (env) -> group_vars, NICHT auf der CLI.
+
       # Schritt 1 — DRY RUN: zeigt, was sich ändern WÜRDE (wie terraform plan).
       - name: Playbook (Check-Modus / Dry Run)
         run: |
           ansible-playbook playbooks/site.yml \
-            -i "inventories/${ENV_NAME}/hosts.ini" \
-            --check --diff \
-            --extra-vars "ansible_user=${ANSIBLE_USER} ansible_password=${ANSIBLE_PASSWORD}"
+            -i "inventories/${ENV_NAME}/azure_rm.yml" \
+            --check --diff
 
       # Schritt 2 — ECHTER LAUF: erst nach dem (ggf. genehmigten) Environment-Gate.
       - name: Playbook ausführen
         run: |
           ansible-playbook playbooks/site.yml \
-            -i "inventories/${ENV_NAME}/hosts.ini" \
-            --extra-vars "ansible_user=${ANSIBLE_USER} ansible_password=${ANSIBLE_PASSWORD}"
+            -i "inventories/${ENV_NAME}/azure_rm.yml"

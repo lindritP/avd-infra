@@ -1,0 +1,162 @@
+#cloud-config
+# ─────────────────────────────────────────────────────────────────────────────
+# Ansible Control Node + EPHEMERAL self-hosted GitHub Actions Runner.
+#
+# Härtung:
+#  - Jobs laufen als unprivilegierter User "runner" (NICHT root).
+#  - IMDS-Lock: der "runner"-User darf 169.254.169.254 nicht erreichen -> ein
+#    Job-Schritt kann den Managed-Identity-Token nicht abgreifen. Nur der
+#    root-Loop nutzt die MI (liest ausschliesslich github-runner-pat aus dem KV).
+#  - Ephemeral: der Runner fuehrt genau EINEN Job aus, dann frisch neu
+#    registriert (kein State-/Secret-Leak zwischen Jobs).
+#  - Azure CLI aus signierter Microsoft-apt-Quelle, Runner-Tarball gepinnt
+#    (kein blindes "curl | bash", kein "latest").
+#  - SSH-Login-User (Break-Glass via Serial Console): ${admin_user}
+#
+# Platzhalter ($${...}) werden von Terraform via templatefile() gefuellt.
+# ─────────────────────────────────────────────────────────────────────────────
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - python3-pip
+  - python3-venv
+  - curl
+  - jq
+  - gnupg
+  - lsb-release
+  - apt-transport-https
+  - ca-certificates
+  - iptables-persistent
+
+write_files:
+  - path: /etc/systemd/system/gh-runner-ephemeral.service
+    permissions: "0644"
+    owner: root:root
+    content: |
+      [Unit]
+      Description=Ephemeral GitHub Actions Runner loop
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      ExecStart=/opt/runner-loop.sh
+      Restart=always
+      RestartSec=10
+      User=root
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /opt/runner-loop.sh
+    permissions: "0700"
+    owner: root:root
+    content: |
+      #!/usr/bin/env bash
+      # Laeuft als root. Holt pro Job ein frisches Registration-Token via MI,
+      # registriert den Runner EPHEMERAL und fuehrt genau einen Job als "runner" aus.
+      set -uo pipefail
+
+      KV_NAME="${kv_name}"
+      REPO_URL="${repo_url}"
+      RUNNER_LABELS="${runner_labels}"
+      RUNNER_DIR="/opt/actions-runner"
+      RUNNER_USER="runner"
+      PAT_SECRET_NAME="github-runner-pat"
+      REPO_SLUG="$(echo "$REPO_URL" | sed -E 's#https://github.com/##')"
+
+      while true; do
+        echo "[runner-loop] az login (managed identity)"
+        if ! az login --identity --allow-no-subscriptions 1>/dev/null; then
+          echo "[runner-loop] az login fehlgeschlagen, retry in 15s"; sleep 15; continue
+        fi
+
+        echo "[runner-loop] PAT aus Key Vault lesen"
+        PAT="$(az keyvault secret show --vault-name "$KV_NAME" --name "$PAT_SECRET_NAME" --query value -o tsv)"
+
+        echo "[runner-loop] Registration-Token holen"
+        REG_TOKEN="$(curl -sf -X POST \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer $PAT" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "https://api.github.com/repos/$REPO_SLUG/actions/runners/registration-token" | jq -r .token)"
+
+        # MI-Session schliessen, bevor der (potenziell fremde) Job laeuft.
+        az logout 1>/dev/null 2>&1 || true
+        unset PAT
+
+        if [ -z "$REG_TOKEN" ] || [ "$REG_TOKEN" = "null" ]; then
+          echo "[runner-loop] kein Token, retry in 15s"; sleep 15; continue
+        fi
+
+        echo "[runner-loop] ephemeral konfigurieren"
+        runuser -u "$RUNNER_USER" -- "$RUNNER_DIR/config.sh" \
+          --url "$REPO_URL" --token "$REG_TOKEN" \
+          --labels "$RUNNER_LABELS" --name "$(hostname)" \
+          --unattended --ephemeral --replace
+
+        echo "[runner-loop] genau einen Job ausfuehren"
+        runuser -u "$RUNNER_USER" -- "$RUNNER_DIR/run.sh" || true
+
+        echo "[runner-loop] Job beendet, neu registrieren"
+        sleep 5
+      done
+
+  - path: /opt/runner-setup.sh
+    permissions: "0700"
+    owner: root:root
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      export DEBIAN_FRONTEND=noninteractive
+
+      RUNNER_DIR="/opt/actions-runner"
+      RUNNER_USER="runner"
+      # GEPINNT: konkrete Runner-Version statt 'latest'. SHA256 von der
+      # Release-Seite eintragen -> sonst wird die Pruefung mit Warnung uebersprungen.
+      RUNNER_VERSION="2.328.0"
+      RUNNER_SHA256="PUT_OFFICIAL_SHA256_HERE"
+
+      echo "[setup] Job-User anlegen (laeuft NICHT als root)"
+      id "$RUNNER_USER" &>/dev/null || useradd -m -s /bin/bash "$RUNNER_USER"
+
+      echo "[setup] Ansible + Azure-Inventory-Abhaengigkeiten"
+      pip3 install --quiet ansible-core pywinrm azure-identity \
+        azure-mgmt-compute azure-mgmt-network azure-mgmt-resource msrestazure
+
+      echo "[setup] Azure CLI aus signierter Microsoft-apt-Quelle"
+      install -m 0755 -d /etc/apt/keyrings
+      curl -sfL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg
+      echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" \
+        > /etc/apt/sources.list.d/azure-cli.list
+      apt-get update -y && apt-get install -y azure-cli
+
+      echo "[setup] Ansible-Collections fuer azure_rm Dynamic Inventory"
+      runuser -u "$RUNNER_USER" -- ansible-galaxy collection install azure.azcollection ansible.windows community.windows || true
+
+      echo "[setup] GitHub-Runner herunterladen (gepinnt) + verifizieren"
+      mkdir -p "$RUNNER_DIR"
+      TARBALL="actions-runner-linux-x64-$RUNNER_VERSION.tar.gz"
+      curl -sfL -o "/tmp/$TARBALL" "https://github.com/actions/runner/releases/download/v$RUNNER_VERSION/$TARBALL"
+      if [ -n "$RUNNER_SHA256" ] && [ "$RUNNER_SHA256" != "PUT_OFFICIAL_SHA256_HERE" ]; then
+        echo "$RUNNER_SHA256  /tmp/$TARBALL" | sha256sum -c -
+      else
+        echo "[setup][WARN] RUNNER_SHA256 nicht gesetzt - Integritaetspruefung uebersprungen!"
+      fi
+      tar xzf "/tmp/$TARBALL" -C "$RUNNER_DIR"
+      chown -R "$RUNNER_USER":"$RUNNER_USER" "$RUNNER_DIR"
+
+      echo "[setup] IMDS-Lock: Job-User darf 169.254.169.254 NICHT erreichen"
+      iptables -C OUTPUT -m owner --uid-owner "$RUNNER_USER" -d 169.254.169.254 -j REJECT 2>/dev/null \
+        || iptables -A OUTPUT -m owner --uid-owner "$RUNNER_USER" -d 169.254.169.254 -j REJECT
+      netfilter-persistent save || true
+
+      echo "[setup] Ephemeral-Runner-Dienst aktivieren"
+      systemctl daemon-reload
+      systemctl enable --now gh-runner-ephemeral.service
+      echo "[setup] fertig."
+
+runcmd:
+  - ["/bin/bash", "/opt/runner-setup.sh"]

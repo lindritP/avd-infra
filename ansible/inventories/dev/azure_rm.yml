@@ -1,0 +1,30 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Dynamic Inventory via azure_rm — fragt Azure live nach VMs.
+# Auth: Managed Identity der Runner-VM (auth_source: msi) -> kein gespeichertes
+# Credential. Die MI braucht nur "Reader" auf die Resource Group.
+# Gruppierung über die Terraform-Tags (role, os) der VMs.
+# Dateiname MUSS auf azure_rm.yml/.yaml enden.
+# ─────────────────────────────────────────────────────────────────────────────
+plugin: azure.azcollection.azure_rm
+auth_source: msi
+
+include_vm_resource_groups:
+  - rg-dc-dev-lindrit-weu
+
+# Hostname = VM-Name (statt langer FQDN/ID).
+plain_host_names: true
+
+# Verbindung über die private IP (Runner ist im selben VNet).
+hostvar_expressions:
+  ansible_host: private_ipv4_addresses[0]
+
+# Gruppen aus Tags: tags.role=dc -> role_dc ; tags.os=windows -> os_windows
+keyed_groups:
+  - prefix: role
+    key: tags.role
+  - prefix: os
+    key: tags.os
+
+# Nur laufende VMs.
+exclude_host_filters:
+  - "powerstate != 'running'"
