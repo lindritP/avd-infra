@@ -12,7 +12,7 @@ resource "azurerm_virtual_network" "vnet" {
   resource_group_name = azurerm_resource_group.rg-vnet.name
   location            = azurerm_resource_group.rg-vnet.location
   address_space       = ["10.0.0.0/16"]
-  dns_servers         = [local.dc_ip_address]
+  //dns_servers         = [local.dc_ip_address]
 }
 
 resource "azurerm_subnet" "subnet" {
@@ -22,9 +22,9 @@ resource "azurerm_subnet" "subnet" {
   address_prefixes     = ["10.0.1.0/24"]
 }
 
-resource "azurerm_subnet" "ansible" {
-  name                 = "snet-${local.ansible_name_suffix}"
-  resource_group_name  = azurerm_resource_group.rg-vnet.name
-  virtual_network_name = azurerm_virtual_network.vnet.name
-  address_prefixes     = ["10.0.2.0/24"]
-}
+# resource "azurerm_subnet" "ansible" {
+#   name                 = "snet-${local.ansible_name_suffix}"
+#   resource_group_name  = azurerm_resource_group.rg-vnet.name
+#   virtual_network_name = azurerm_virtual_network.vnet.name
+#   address_prefixes     = ["10.0.2.0/24"]
+# }
