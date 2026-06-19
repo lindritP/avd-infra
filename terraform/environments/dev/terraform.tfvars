@@ -12,4 +12,4 @@ dc_admin_username = "lindadmin"
 # Optional: eigene Azure-AD-Object-ID(s), um das DC-Passwort im Key Vault lesen zu dürfen.
 # kv_secret_reader_object_ids = ["<deine-object-id>"]
 
-# ansible_vm_size = "Standard_B2ls_v2"
+ansible_vm_size = "Standard_B2ls_v2"

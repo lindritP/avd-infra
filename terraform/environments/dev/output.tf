@@ -58,12 +58,12 @@ output "dc_admin_password_secret_id" {
   value       = azurerm_key_vault_secret.dc_admin_password.id
 }
 
-# output "ansible_controller_private_ip" {
-#   description = "Private IP der Ansible-Control-Node im segmentierten Subnet"
-#   value       = azurerm_network_interface.ansible.private_ip_address
-# }
+output "ansible_controller_private_ip" {
+  description = "Private IP der Ansible-Control-Node im segmentierten Subnet"
+  value       = azurerm_network_interface.ansible.private_ip_address
+}
 
-# output "ansible_controller_access_hint" {
-#   description = "Wartungszugang ohne Public IP: Azure Serial Console (Portal -> VM -> Serial Console) oder Bastion/JIT. Break-Glass-SSH-Key liegt im Key Vault (Secret ansible-controller-ssh-key)."
-#   value       = "Portal -> vm-${local.ansible_name_suffix} -> Serial Console"
-# }
+output "ansible_controller_access_hint" {
+  description = "Wartungszugang ohne Public IP: Azure Serial Console (Portal -> VM -> Serial Console) oder Bastion/JIT. Break-Glass-SSH-Key liegt im Key Vault (Secret ansible-controller-ssh-key)."
+  value       = "Portal -> vm-${local.ansible_name_suffix} -> Serial Console"
+}
