@@ -35,10 +35,17 @@ jobs:
       - name: Ansible-Tools installieren
         run: pip install --quiet ansible-core ansible-lint
 
+      # Collections installieren, damit ansible.cfg (enable_plugins azure_rm)
+      # ohne "plugin not found" geparst werden kann.
+      - name: Collections installieren
+        run: ansible-galaxy collection install -r requirements.yml
+
       # GATE 1: ansible-lint findet riskante/unsaubere Muster in Playbooks & Rollen.
       - name: ansible-lint
         run: ansible-lint
 
       # GATE 2: Syntax-Check (lädt das Playbook, ohne es auszuführen).
+      # -i localhost, : das dynamische azure_rm-Inventory braucht Azure-Auth
+      # (nur auf dem self-hosted Runner verfügbar) -> hier ein Inline-Stub.
       - name: Syntax-Check
-        run: ansible-playbook playbooks/site.yml --syntax-check -i inventories/dev/hosts.ini
+        run: ansible-playbook playbooks/site.yml --syntax-check -i "localhost,"

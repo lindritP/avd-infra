@@ -1,0 +1,18 @@
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# Haupt-Playbook (Einstiegspunkt fuer die Ansible CI/CD).
+#
+# Platzhalter: haelt die CI (lint + syntax-check mit ansible-core) gruen und
+# bietet dem self-hosted Runner etwas Ausfuehrbares. Konkrete Rollen
+# (WinRM-Enablement, DC-Promotion, FSLogix, App-Installation) sowie der echte
+# WinRM-Connectivity-Check (ansible.windows.win_ping aus requirements.yml)
+# kommen in Folgeschritten.
+# ─────────────────────────────────────────────────────────────────────────────
+
+- name: Platzhalter-Play (Bootstrap)
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Hinweis ausgeben
+      ansible.builtin.debug:
+        msg: "Ansible Control Node steht. Rollen folgen in Folgeschritten."
