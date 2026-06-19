@@ -44,26 +44,26 @@ variable "kv_secret_reader_object_ids" {
 
 # ── Ansible Control Node / self-hosted GitHub Runner ────────────────────────
 
-variable "ansible_vm_size" {
-  description = "VM-Groesse der Ansible-Control-Node / des self-hosted Runners."
-  type        = string
-  default     = "Standard_B2s"
-}
+# variable "ansible_vm_size" {
+#   description = "VM-Groesse der Ansible-Control-Node / des self-hosted Runners."
+#   type        = string
+#   default     = "Standard_B2s"
+# }
 
-variable "ansible_admin_username" {
-  description = "Lokaler Admin-/SSH-Benutzer der Ansible-Control-Node."
-  type        = string
-  default     = "azureadmin"
-}
+# variable "ansible_admin_username" {
+#   description = "Lokaler Admin-/SSH-Benutzer der Ansible-Control-Node."
+#   type        = string
+#   default     = "azureadmin"
+# }
 
-variable "github_repo_url" {
-  description = "GitHub-Repo-URL, bei dem sich der self-hosted Runner registriert."
-  type        = string
-  default     = "https://github.com/lindritP/avd-infra"
-}
+# variable "github_repo_url" {
+#   description = "GitHub-Repo-URL, bei dem sich der self-hosted Runner registriert."
+#   type        = string
+#   default     = "https://github.com/lindritP/avd-infra"
+# }
 
-variable "runner_labels" {
-  description = "Labels des self-hosted GitHub-Runners (kommagetrennt)."
-  type        = string
-  default     = "self-hosted,vnet"
-}
+# variable "runner_labels" {
+#   description = "Labels des self-hosted GitHub-Runners (kommagetrennt)."
+#   type        = string
+#   default     = "self-hosted,vnet"
+# }
