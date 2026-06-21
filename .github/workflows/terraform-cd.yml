@@ -33,6 +33,9 @@ env:
   ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
   ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
   ARM_USE_OIDC: "true"
+  # PAT als sensible TF-Variable (NICHT auf der CLI) -> schreibt das Key-Vault-Secret
+  # github-runner-pat. Im Repo unter Settings > Secrets and variables > Actions anlegen.
+  TF_VAR_github_runner_pat: ${{ secrets.GH_RUNNER_PAT }}
 
 jobs:
   # ── JOB 1: PLAN ──────────────────────────────────────────────────────────────

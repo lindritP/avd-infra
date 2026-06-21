@@ -34,6 +34,19 @@ resource "azurerm_key_vault_secret" "ansible_ssh_private_key" {
   depends_on = [time_sleep.kv_rbac_propagation]
 }
 
+# GitHub-PAT fuer die Runner-Registrierung. Wert kommt aus var.github_runner_pat
+# (TF_VAR_github_runner_pat / GitHub-Secret), NICHT aus dem Code. Genau dieser
+# Secret-Name wird vom cloud-init (PAT_SECRET_NAME) gelesen und ist das Ziel der
+# RBAC-Zuweisung 'ansible_kv_reader' unten. count=0 -> PR-Plan ohne PAT moeglich.
+resource "azurerm_key_vault_secret" "github_runner_pat" {
+  count        = var.github_runner_pat == null ? 0 : 1
+  name         = "github-runner-pat"
+  value        = var.github_runner_pat
+  key_vault_id = azurerm_key_vault.kv.id
+
+  depends_on = [time_sleep.kv_rbac_propagation]
+}
+
 resource "azurerm_network_security_group" "ansible" {
   name                = "nsg-${local.ansible_name_suffix}"
   resource_group_name = azurerm_resource_group.ansible.name
@@ -115,7 +128,7 @@ resource "azurerm_network_interface" "ansible" {
 }
 
 resource "azurerm_linux_virtual_machine" "ansible" {
-  name                = "vm-${local.ansible_name_suffix}"
+  name                = "ansible-01"
   resource_group_name = azurerm_resource_group.ansible.name
   location            = azurerm_resource_group.ansible.location
   size                = var.ansible_vm_size

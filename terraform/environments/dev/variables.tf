@@ -67,3 +67,16 @@ variable "runner_labels" {
   type        = string
   default     = "self-hosted,vnet"
 }
+
+# GitHub-PAT, mit dem der Runner-Loop pro Job ein Registration-Token holt.
+# Wird als Key-Vault-Secret 'github-runner-pat' abgelegt; der Runner liest es
+# zur Laufzeit per Managed Identity. NIE committen -> Wert via
+# TF_VAR_github_runner_pat bzw. GitHub-Secret injizieren.
+# default = null erlaubt einen PR-Plan OHNE PAT (dann wird das Secret nicht
+# (neu) geschrieben). Im CD-/Apply-Lauf MUSS die Variable gesetzt sein.
+variable "github_runner_pat" {
+  description = "GitHub PAT (fine-grained: Repo 'Administration' read/write, oder classic 'repo') zum Erzeugen der ephemeren Runner-Registration-Tokens."
+  type        = string
+  default     = null
+  sensitive   = true
+}
